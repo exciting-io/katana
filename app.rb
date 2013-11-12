@@ -8,7 +8,8 @@ module Katana
       REDIS = Redis.new(:host => uri.host, :port => uri.port, :password => uri.password)
       adapter = Guillotine::Adapters::RedisAdapter.new REDIS
       set :service => Guillotine::Service.new(adapter, :strip_query => false,
-                                              :strip_anchor => false)
+                                              :strip_anchor => false,
+                                              :default_url => ENV["DEFAULT_URL"])
 
       # authenticate everything except GETs
       before do
@@ -18,7 +19,11 @@ module Katana
       end
 
       get '/' do
-        "Shorten all the URLs"
+        do_redirection
+      end
+
+      get "/*" do
+        do_redirection(params[:splat].first)
       end
 
       if ENV['TWEETBOT_API']
@@ -36,6 +41,16 @@ module Katana
 
       # helper methods
       helpers do
+        def do_redirection(code=nil)
+          if code.nil?
+            default_url = settings.service.default_url
+            redirect default_url if !default_url.nil?
+          else
+            escaped = Addressable::URI.escape(code)
+            status, head, body = settings.service.get(escaped)
+            [status, head, simple_escape(body)]
+          end
+        end
 
         # Private: helper method to protect URLs with Rack Basic Auth
         #
